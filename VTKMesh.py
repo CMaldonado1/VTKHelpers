@@ -2,7 +2,6 @@ import vtk
 import numpy as np
 import os
 import meshio # tested with 2.3.0
-from pyevtk.hl import pointsToVTK
 
 '''
 This module is aimed to simplify the implementation of common tasks on VTK meshes,
@@ -31,6 +30,8 @@ class VTKObject():
             self.generateNeighborsDict()
             self.extractTriangles()
             self.extractPartitionIDs()
+            self.v = self.points
+            self.f = np.array(self.triangles)
 
 
     def getMesh(self):
@@ -71,7 +72,7 @@ class VTKObject():
     def extractPartitionIDs(self):
 
         '''
-        Extracting Subpart ID
+        Generate a list of the subpart IDs for each of the vertices (i.e. which partition of the mesh they belong to)
         '''
 
         output = self.reader.GetOutput()
@@ -84,13 +85,17 @@ class VTKObject():
 
         subvtk = VTKObject()
         subvtk.points = np.array([self.points[i] for i, x in enumerate(self.points) if self.subpartID[i] in ids])
-        subvtk.point_ids = { i for i, id in enumerate(self.subpartID) if id in ids }
+        subvtk.point_ids = [ i for i, id in enumerate(self.subpartID) if id in ids ]
         subvtk.n_points = len(subvtk.points)
 
-        #
-        subvtk.triangles = [tuple(triang) for triang in self.triangles if all([kk in subvtk.point_ids for kk in triang])]
+        subvtk.triangles = [tuple(triang) for triang in self.triangles if all([pp in subvtk.point_ids for pp in triang])]
 
-        # : self.neighbors_dict[i] for i, _ in enumerate(self.subpartID) if self.subpartID[i] in ids}
+        id_mapping = { x:i for i, x in enumerate(subvtk.point_ids) }
+        subvtk.triangles = [ tuple([id_mapping[x] for x in tr]) for tr in subvtk.triangles]
+
+
+        subvtk.v = subvtk.points
+        subvtk.f = np.array(subvtk.triangles)
 
         return subvtk
 
