@@ -2,6 +2,7 @@ import vtk
 import numpy as np
 import os
 import meshio # tested with 2.3.0
+from scipy import sparse as sp
 
 '''
 This module is aimed to simplify the implementation of common tasks on VTK meshes,
@@ -11,7 +12,7 @@ and render the code difficult to follow.
 
 class VTKObject():
 
-    def __init__(self, filename=None):
+    def __init__(self, filename=None, subpartIDs=None):
 
         self.filename = filename
         self.n_points = None
@@ -26,12 +27,13 @@ class VTKObject():
             self.reader.SetFileName(self.filename)
             self.reader.Update()
             self.getMesh()
-            self.extractPointsAndEdges()
-            self.generateNeighborsDict()
             self.extractTriangles()
             self.extractPartitionIDs()
             self.v = self.points
             self.f = np.array(self.triangles)
+        
+        if subpartIDs is not None:
+            self = self.extractSubpart(subpartIDs)
 
 
     def getMesh(self):
@@ -45,27 +47,16 @@ class VTKObject():
         self.n_points = output.GetNumberOfPoints()
         self.n_cells = output.GetNumberOfCells()
         self.points = np.array([output.GetPoint(i) for i in range(self.n_points)])
-        # return output
-
-
-    def extractPointsAndEdges(self):
-
-        output = self.reader.GetOutput()
+        
         for i in range(self.n_cells):
             pts_cell = output.GetCell(i)
             for j in range(pts_cell.GetNumberOfEdges()):
-                # print("%s %s" % (pts_cell.GetEdge(j).GetPointId(0), pts_cell.GetEdge(j).GetPointId(1)))
                 self.edges.append(([int(pts_cell.GetEdge(j).GetPointId(i)) for i in (0, 1)]))
-
-
-    def generateNeighborsDict(self):
-        for nb_pair in self.edges:
-            self.neighbors_dict[nb_pair[0]] = self.neighbors_dict.get(nb_pair[0], []) + [nb_pair[1]]
+                self.neighbors_dict.get(self.edges[-1][0], []).append(self.edges[-1][1])
 
 
     def extractTriangles(self):
         output = self.reader.GetOutput()
-        # self.triangles = tuple([[int(output.GetCell(j).GetPointId(i)] for i in (0, 1, 2)) for j in range(self.n_cells)])
         self.triangles = [[int(output.GetCell(j).GetPointId(i)) for i in (0, 1, 2)] for j in range(self.n_cells)]
 
 
@@ -85,20 +76,37 @@ class VTKObject():
 
         subvtk = VTKObject()
         subvtk.points = np.array([self.points[i] for i, x in enumerate(self.points) if self.subpartID[i] in ids])
-        subvtk.point_ids = [ i for i, id in enumerate(self.subpartID) if id in ids ]
         subvtk.n_points = len(subvtk.points)
 
-        subvtk.triangles = [tuple(triang) for triang in self.triangles if all([pp in subvtk.point_ids for pp in triang])]
+        point_ids = [ i for i, id in enumerate(self.subpartID) if id in ids ]
+        triangles = [tuple(triang) for triang in self.triangles if all([pp in point_ids for pp in triang])]
 
-        id_mapping = { x:i for i, x in enumerate(subvtk.point_ids) }
-        subvtk.triangles = [ tuple([id_mapping[x] for x in tr]) for tr in subvtk.triangles]
-
+        id_mapping = { x:i for i, x in enumerate(point_ids) }
+        subvtk.triangles = [ tuple([id_mapping[x] for x in tr]) for tr in triangles]
 
         subvtk.v = subvtk.points
         subvtk.f = np.array(subvtk.triangles)
 
         return subvtk
 
+    def get_adj_matrix(self):
+        """Returns a sparse matrix (of size #verts x #verts) where each nonzero
+        element indicates a neighborhood relation. For example, if there is a
+        nonzero element in position (15,12), that means vertex 15 is connected
+        by an edge to vertex 12."""
+          
+        adj_matrix = sp.csc_matrix((
+            np.ones(len(self.edges)), 
+              ([x[0] for x in self.edges], 
+               [x[1] for x in self.edges])
+            ))
+
+        return adj_matrix
+
+    def adj_matrix_to_edges(self, adj_matrix):
+         non_zero_indices = sp.find(adj_matrix)
+         return zip(non_zero_indices[0], non_zero_indices[1])
+    
 
     # point cloud to vtk
     def save_utk(self, filename):
