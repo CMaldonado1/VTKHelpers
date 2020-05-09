@@ -12,7 +12,7 @@ and render the code difficult to follow.
 
 class VTKObject():
 
-    def __init__(self, filename=None, subpartIDs=None):
+    def __init__(self, filename=None, subpartIDs=None, load_connectivity=True):
 
         self.filename = filename
         self.n_points = None
@@ -21,16 +21,17 @@ class VTKObject():
         self.edges = []
         self.triangles = []
         self.neighbors_dict = {}
+        self.load_connectivity = load_connectivity
 
         if filename is not None:
             self.reader = vtk.vtkPolyDataReader()
             self.reader.SetFileName(self.filename)
             self.reader.Update()
             self.getMesh()
-            self.extractTriangles()
+            # self.extractTriangles()
             self.extractPartitionIDs()
-            self.v = self.points
-            self.f = np.array(self.triangles)
+            self.v = self.points # for compatibility with other code
+            self.f = np.array(self.triangles) # idem
         
         if subpartIDs is not None:
             self = self.extractSubpart(subpartIDs)
@@ -47,12 +48,19 @@ class VTKObject():
         self.n_points = output.GetNumberOfPoints()
         self.n_cells = output.GetNumberOfCells()
         self.points = np.array([output.GetPoint(i) for i in range(self.n_points)])
-        
+        if self.load_connectivity:
+            self.loadConnectivity()
+       
+    
+    def loadConnectivity(self):
+ 
+        output = self.reader.GetOutput()
         for i in range(self.n_cells):
             pts_cell = output.GetCell(i)
             for j in range(pts_cell.GetNumberOfEdges()):
                 self.edges.append(([int(pts_cell.GetEdge(j).GetPointId(i)) for i in (0, 1)]))
                 self.neighbors_dict.get(self.edges[-1][0], []).append(self.edges[-1][1])
+        self.triangles = [[int(output.GetCell(j).GetPointId(i)) for i in (0, 1, 2)] for j in range(self.n_cells)]
 
 
     def extractTriangles(self):
@@ -78,14 +86,15 @@ class VTKObject():
         subvtk.points = np.array([self.points[i] for i, x in enumerate(self.points) if self.subpartID[i] in ids])
         subvtk.n_points = len(subvtk.points)
 
-        point_ids = [ i for i, id in enumerate(self.subpartID) if id in ids ]
-        triangles = [tuple(triang) for triang in self.triangles if all([pp in point_ids for pp in triang])]
+        if self.edges is not None:
+            point_ids = [ i for i, id in enumerate(self.subpartID) if id in ids ]
+            triangles = [tuple(triang) for triang in self.triangles if all([pp in point_ids for pp in triang])]
 
-        id_mapping = { x:i for i, x in enumerate(point_ids) }
-        subvtk.triangles = [ tuple([id_mapping[x] for x in tr]) for tr in triangles]
+            id_mapping = { x:i for i, x in enumerate(point_ids) }
+            subvtk.triangles = [ tuple([id_mapping[x] for x in tr]) for tr in triangles]
 
-        subvtk.v = subvtk.points
-        subvtk.f = np.array(subvtk.triangles)
+            subvtk.v = subvtk.points
+            subvtk.f = np.array(subvtk.triangles)
 
         return subvtk
 
