@@ -1,8 +1,7 @@
 import vtk
 import numpy as np
 import os
-import meshio # tested with 2.3.0
-from scipy import sparse as sp
+# import meshio # tested with 2.3.0
 
 '''
 This module is aimed to simplify the implementation of common tasks on VTK meshes,
@@ -103,7 +102,9 @@ class VTKObject():
         element indicates a neighborhood relation. For example, if there is a
         nonzero element in position (15,12), that means vertex 15 is connected
         by an edge to vertex 12."""
-          
+
+        from scipy import sparse as sp
+
         adj_matrix = sp.csc_matrix((
             np.ones(len(self.edges)), 
               ([x[0] for x in self.edges], 
@@ -113,8 +114,9 @@ class VTKObject():
         return adj_matrix
 
     def adj_matrix_to_edges(self, adj_matrix):
-         non_zero_indices = sp.find(adj_matrix)
-         return zip(non_zero_indices[0], non_zero_indices[1])
+        from scipy import sparse as sp
+        non_zero_indices = sp.find(adj_matrix)
+        return zip(non_zero_indices[0], non_zero_indices[1])
     
 
     # point cloud to vtk
@@ -136,12 +138,12 @@ class VTKObject():
 
 
     # mesh to vtk
-    def SaveMeshToVTK(self, filename):
-        meshio.write_points_cells(
-            filename,
-            self.points,
-            {'triangle': np.array(self.triangles)}
-        )
+#    def SaveMeshToVTK(self, filename):
+#        meshio.write_points_cells(
+#            filename,
+#            self.points,
+#            {'triangle': np.array(self.triangles)}
+  #      )
         #mesh = meshio.Mesh(self.points, )
         #meshio.write(filename, mesh)
 
