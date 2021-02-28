@@ -1,7 +1,7 @@
 import vtk
 import numpy as np
 import os
-# import meshio # tested with 2.3.0
+import meshio # tested with 2.3.0
 
 '''
 This module is aimed to simplify the implementation of common tasks on VTK meshes,
@@ -83,6 +83,7 @@ class VTKObject():
 
         subvtk = VTKObject()
         subvtk.points = np.array([self.points[i] for i, x in enumerate(self.points) if self.subpartID[i] in ids])
+        subvtk.subpartID = np.array([self.subpartID[i] for i, x in enumerate(self.points) if self.subpartID[i] in ids])
         subvtk.n_points = len(subvtk.points)
 
         if self.edges is not None:
@@ -90,18 +91,21 @@ class VTKObject():
             triangles = [tuple(triang) for triang in self.triangles if all([pp in point_ids for pp in triang])]
 
             id_mapping = { x:i for i, x in enumerate(point_ids) }
-            subvtk.triangles = [ tuple([id_mapping[x] for x in tr]) for tr in triangles]
+            subvtk.triangles = np.array([ tuple([id_mapping[x] for x in tr]) for tr in triangles ])
 
             subvtk.v = subvtk.points
-            subvtk.f = np.array(subvtk.triangles)
+            subvtk.f = subvtk.triangles
 
         return subvtk
 
     def get_adj_matrix(self):
-        """Returns a sparse matrix (of size #verts x #verts) where each nonzero
+
+        """
+        Returns a sparse matrix (of size #verts x #verts) where each nonzero
         element indicates a neighborhood relation. For example, if there is a
         nonzero element in position (15,12), that means vertex 15 is connected
-        by an edge to vertex 12."""
+        by an edge to vertex 12.
+        """
 
         from scipy import sparse as sp
 
@@ -138,14 +142,14 @@ class VTKObject():
 
 
     # mesh to vtk
-#    def SaveMeshToVTK(self, filename):
-#        meshio.write_points_cells(
-#            filename,
-#            self.points,
-#            {'triangle': np.array(self.triangles)}
-  #      )
-        #mesh = meshio.Mesh(self.points, )
-        #meshio.write(filename, mesh)
+    def SaveMeshToVTK(self, filename):
+        #meshio.write_points_cells(
+        #    filename,
+        #    self.points,
+        #    cells={'triangle': np.array(self.triangles)}
+        #)
+        mesh = meshio.Mesh(self.points, {'triangle':self.triangles})
+        meshio.write(filename, mesh)
 
 
     # def save(self, filename):
